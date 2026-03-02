@@ -1,27 +1,18 @@
-import { NextFunction, Request, Response } from 'express';
+import { RequestHandler } from 'express';
 import { ResultSetHeader, RowDataPacket } from 'mysql2';
 
 import connection from '../config/db';
+import { Product } from '../types/product.types';
 import { AppError } from '../utils/AppError';
+import { RequestParamsProducts } from '../types/dto.types';
 
-// TODO isolate interfaces/types to a declaration file
-interface Product {
-  name: string;
-  quantity: number;
-  description: string;
-  price: number;
-}
-
-interface InventoryParams {
-  productId: number;
-}
-
-// TODO validations
+// review basic validations
+// review isolate interfaces/types to a declaration file
 // review main function
 // review send response
 // review error handling
 
-export async function retrieveAllProducts(req: Request, res: Response, next: NextFunction) {
+export const retrieveAllProducts: RequestHandler = async (req, res, next) => {
   try {
     const [rows] = await connection.execute<RowDataPacket[]>('SELECT * FROM products');
 
@@ -31,13 +22,9 @@ export async function retrieveAllProducts(req: Request, res: Response, next: Nex
   } catch (error) {
     next(error);
   }
-}
+};
 
-export async function retrieveOneProduct(
-  req: Request<InventoryParams>,
-  res: Response,
-  next: NextFunction
-) {
+export const retrieveOneProduct: RequestHandler = async (req, res, next) => {
   try {
     const { productId } = req.params;
 
@@ -52,17 +39,25 @@ export async function retrieveOneProduct(
   } catch (error) {
     next(error);
   }
-}
+};
 
-export async function addProduct(req: Request<{}, {}, Product>, res: Response, next: NextFunction) {
+export const addProduct: RequestHandler<{}, any, Product> = async (req, res, next) => {
   try {
+    // review missing required fields, empty string after trim()
+    // review limit max char length
+
     const { name, description, quantity, price } = req.body;
 
-    // todo check first if product already exists
+    const safeDescription: string | null = description ?? null;
 
-    const [result] = await connection.execute<ResultSetHeader>(
-      'INSERT INTO product (name,description,quantity,price) VALUES (?,?,?,?)',
-      [name, description, quantity, price]
+    // todo don't allow duplicate items
+
+    // review sql injection attacks
+
+    let [result] = await connection.execute<ResultSetHeader>(
+      `INSERT INTO product (name,description,quantity,price) VALUES (?,?,?,?)`,
+      [name, safeDescription, quantity, price]
+      // review nullish coalescing, replaces only null/undefined
     );
 
     if (!result.affectedRows) throw Error;
@@ -71,23 +66,28 @@ export async function addProduct(req: Request<{}, {}, Product>, res: Response, n
   } catch (error) {
     next(error);
   }
-}
+};
 
-export async function updateProduct(
-  req: Request<InventoryParams, {}, Product>,
-  res: Response,
-  next: NextFunction
-) {
+export const updateProduct: RequestHandler<RequestParamsProducts, any, Product> = async (
+  req,
+  res,
+  next
+) => {
   try {
     const { productId } = req.params;
     const { name, price, quantity, description } = req.body;
 
-    // todo check first if product exists
-    // todo check if user input actually changed something
+    const safeDescription: string | null = description ?? null;
+
+    // review id does not exist
+    // todo empty update body not allowed, may overwrite values with undefined
+    // todo partial update handling
+    // todo check if user input actually changed something, updating to same value, use result.changedRows === 0
+    // review race conditions (2 clients updating the same record simultaneously)
 
     const [result] = await connection.execute<ResultSetHeader>(
       'UPDATE products SET name = ?, price = ?, quantity = ?, description = ? WHERE productId = ? ',
-      [name, price, quantity, description, productId]
+      [name, price, quantity, safeDescription, productId]
     );
 
     if (!result.affectedRows) throw Error;
@@ -96,17 +96,14 @@ export async function updateProduct(
   } catch (error) {
     next(error);
   }
-}
+};
 
-export async function deleteProduct(
-  req: Request<InventoryParams>,
-  res: Response,
-  next: NextFunction
-) {
+export const deleteProduct: RequestHandler<RequestParamsProducts> = async (req, res, next) => {
   try {
     const { productId } = req.params;
 
-    // todo check first if product exists
+    // review id does not exist
+    // todo client deletes twice
 
     const [result] = await connection.execute<ResultSetHeader>(
       'DELETE FROM products WHERE productId =?',
@@ -119,4 +116,4 @@ export async function deleteProduct(
   } catch (error) {
     next(error);
   }
-}
+};
