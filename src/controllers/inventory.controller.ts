@@ -43,21 +43,26 @@ export const retrieveOneProduct: RequestHandler = async (req, res, next) => {
 
 export const addProduct: RequestHandler<{}, any, Product> = async (req, res, next) => {
   try {
-    // review missing required fields, empty string after trim()
     // review limit max char length
 
+    // review missing required fields, empty string after trim()
     const { name, description, quantity, price } = req.body;
 
+    // review nullish coalescing, replaces only null/undefined
     const safeDescription: string | null = description ?? null;
 
-    // todo don't allow duplicate items
+    let [product] = await connection.execute<RowDataPacket[]>(
+      'SELECT * FROM products WHERE name = ?',
+      [name]
+    );
 
-    // review sql injection attacks
+    // review don't allow duplicate items
+    if (product.length > 0) throw new AppError('A product with this name already exists', 409);
 
     let [result] = await connection.execute<ResultSetHeader>(
       `INSERT INTO products (name,description,quantity,price) VALUES (?,?,?,?)`,
+      // review sql injection attacks, values parametrized
       [name, safeDescription, quantity, price]
-      // review nullish coalescing, replaces only null/undefined
     );
 
     if (!result.affectedRows) throw Error;
@@ -74,16 +79,17 @@ export const updateProduct: RequestHandler<RequestParamsProducts, any, Product> 
   next
 ) => {
   try {
+    // review id does not exist
     const { productId } = req.params;
+    // review empty update body not allowed
     const { name, price, quantity, description } = req.body;
 
+    // review value should only be either null or string, if undefined or null set to null
     const safeDescription: string | null = description ?? null;
 
-    // review id does not exist
-    // todo empty update body not allowed, may overwrite values with undefined
-    // todo partial update handling
-    // todo check if user input actually changed something, updating to same value, use result.changedRows === 0
-    // review race conditions (2 clients updating the same record simultaneously)
+    // IDEA partial update handling
+    // IDEA check if user input actually changed something, updating to same value, use result.changedRows === 0
+    // IDEA race conditions, not a problem with postgresql (2 clients updating the same record simultaneously)
 
     const [result] = await connection.execute<ResultSetHeader>(
       'UPDATE products SET name = ?, price = ?, quantity = ?, description = ? WHERE productId = ? ',
@@ -100,10 +106,10 @@ export const updateProduct: RequestHandler<RequestParamsProducts, any, Product> 
 
 export const deleteProduct: RequestHandler<RequestParamsProducts> = async (req, res, next) => {
   try {
+    // review id does not exist
     const { productId } = req.params;
 
-    // review id does not exist
-    // todo client deletes twice
+    // IDEA client deletes twice
 
     const [result] = await connection.execute<ResultSetHeader>(
       'DELETE FROM products WHERE productId =?',

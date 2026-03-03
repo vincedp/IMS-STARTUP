@@ -17,9 +17,10 @@ app.get('/', (req: Request, res: Response) => {
   res.send('This server is working, hello world! 👋🌍💥');
 });
 
+// review centralized error handler
 app.use(errorHandler);
 
-// todo centralized error handler
+// todo handle non existent endpoints
 
 app.listen(process.env.SERVER_PORT, () => {
   console.log(`🚀 App is running on http://localhost:${process.env.SERVER_PORT}`);

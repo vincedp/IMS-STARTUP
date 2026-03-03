@@ -1,4 +1,4 @@
-import { body, param, ValidationChain } from 'express-validator';
+import { body, param } from 'express-validator';
 
 export const addProductValidator = [
   body('name')
