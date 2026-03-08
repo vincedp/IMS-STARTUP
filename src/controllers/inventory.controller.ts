@@ -1,39 +1,87 @@
 import { RequestHandler } from 'express';
 import { ResultSetHeader, RowDataPacket } from 'mysql2';
 
-import connection from '../config/db';
+import connection from '../configs/db';
 import { Product } from '../types/product.types';
 import { AppError } from '../utils/AppError';
-import { RequestParamsProducts } from '../types/dto.types';
+import {
+  ParamsProducts,
+  ParamsRetrieveProducts,
+  QueryProducts,
+  QueryRetrieveProducts,
+} from '../types/dto.types';
 
-// review basic validations
-// review isolate interfaces/types to a declaration file
-// review main function
-// review send response
-// review error handling
-
-export const retrieveAllProducts: RequestHandler = async (req, res, next) => {
+export const retrieveAllProducts: RequestHandler<any, any, {}, QueryRetrieveProducts> = async (
+  req,
+  res,
+  next
+) => {
   try {
-    const [rows] = await connection.execute<RowDataPacket[]>('SELECT * FROM products');
+    const { page, limit, filterField, filter, sortBy, sortDirection } = req.query;
 
-    if (!rows.length) throw new AppError('Product list is empty', 404);
+    // CONSTANTS & HELPERS
+    const DEFAULT_PAGE = 1;
+    const DEFAULT_LIMIT = 10;
+    const convertToZeroBasedIdx = (num: number) => num - 1;
+    const isFilterExist = filter && filterField ? true : false;
 
-    res.status(200).json({ msg: 'success! retrieved all products', data: rows });
+    // PAGINATION
+    const currPage = +page || DEFAULT_PAGE;
+    const currLimit = +limit || DEFAULT_LIMIT;
+    const offset = convertToZeroBasedIdx(currPage) * currLimit;
+
+    // CONDITIONALLY GENERATE SQL QUERIES
+    const sortQuery = `ORDER BY ${sortBy || 'created_at'} ${sortDirection || 'DESC'}`;
+    const filterQuery = `WHERE ${filterField} LIKE ?`;
+    const query = `SELECT * FROM products ${isFilterExist ? filterQuery : ''} ${sortBy ? sortQuery : ''}  LIMIT ? OFFSET ?`;
+
+    // PARAMETERIZED VALUES ARRAY
+    const parametrizedValues: (string | number)[] = [currLimit, offset];
+    if (isFilterExist) parametrizedValues.unshift(`%${filter}%`);
+
+    // GET TOTAL PAGES
+    const [[{ total }]] = await connection.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) as total FROM products ${isFilterExist ? filterQuery : ''}`,
+      isFilterExist ? [`%${filter}%`] : []
+    );
+    const totalPages = Math.ceil(total / currLimit);
+    if (currPage > totalPages && totalPages > 0) throw new AppError('Page not found', 400);
+
+    const [rows] = await connection.execute<RowDataPacket[]>(query, parametrizedValues);
+    res.status(200).json({
+      msg: 'success! retrieved all products',
+      data: {
+        products: rows,
+        pagination: {
+          page: currPage,
+          limit: currLimit,
+          total,
+          totalPages,
+        },
+      },
+    });
   } catch (error) {
     next(error);
   }
 };
 
-export const retrieveOneProduct: RequestHandler = async (req, res, next) => {
+export const retrieveOneProduct: RequestHandler<
+  ParamsRetrieveProducts,
+  any,
+  {},
+  QueryProducts
+> = async (req, res, next) => {
   try {
-    const { productId } = req.params;
+    const { search } = req.params;
+    const { field } = req.query;
 
+    // RETRIEVE A PRODUCT BASED ON ALLOWED FIELD AND SEARCH STRING
+    // SEARCH BY NAME, PRODUCT_ID, BARCODE
     const [rows] = await connection.execute<RowDataPacket[]>(
-      'SELECT * FROM products WHERE productId = ?',
-      [productId]
+      `SELECT * FROM products WHERE ${field} = ?`,
+      [search]
     );
-
-    if (!rows.length) throw new AppError('Product list is empty', 404);
+    if (!rows.length) throw new AppError('Product does not exist', 404);
 
     res.status(200).json({ msg: 'success! retrieved one product', data: rows });
   } catch (error) {
@@ -43,28 +91,24 @@ export const retrieveOneProduct: RequestHandler = async (req, res, next) => {
 
 export const addProduct: RequestHandler<{}, any, Product> = async (req, res, next) => {
   try {
-    // review limit max char length
+    const { name, barcode, stockQuantity, price } = req.body;
 
-    // review missing required fields, empty string after trim()
-    const { name, description, quantity, price } = req.body;
+    // MYSQL DB ONLY KNOWS NULL NOT UNDEFINED
+    const safeBarcode: string | null = barcode ?? null;
 
-    // review nullish coalescing, replaces only null/undefined
-    const safeDescription: string | null = description ?? null;
-
-    let [product] = await connection.execute<RowDataPacket[]>(
+    // CHECK FIRST IF PRODUCT ALREADY EXISTS
+    let [isProductExist] = await connection.execute<RowDataPacket[]>(
       'SELECT * FROM products WHERE name = ?',
       [name]
     );
+    if (isProductExist.length > 0)
+      throw new AppError('A product with this name already exists', 409);
 
-    // review don't allow duplicate items
-    if (product.length > 0) throw new AppError('A product with this name already exists', 409);
-
+    // INSERT NEW PRODUCT TO MYSQL DB
     let [result] = await connection.execute<ResultSetHeader>(
-      `INSERT INTO products (name,description,quantity,price) VALUES (?,?,?,?)`,
-      // review sql injection attacks, values parametrized
-      [name, safeDescription, quantity, price]
+      `INSERT INTO products (name,barcode,stock_quantity,price) VALUES (?,?,?,?)`,
+      [name, safeBarcode, stockQuantity, price]
     );
-
     if (!result.affectedRows) throw Error;
 
     res.status(200).json({ msg: 'success! added a product', data: req.body });
@@ -73,52 +117,66 @@ export const addProduct: RequestHandler<{}, any, Product> = async (req, res, nex
   }
 };
 
-export const updateProduct: RequestHandler<RequestParamsProducts, any, Product> = async (
+export const updateProduct: RequestHandler<ParamsProducts, any, Partial<Product>> = async (
   req,
   res,
   next
 ) => {
   try {
-    // review id does not exist
     const { productId } = req.params;
-    // review empty update body not allowed
-    const { name, price, quantity, description } = req.body;
 
-    // review value should only be either null or string, if undefined or null set to null
-    const safeDescription: string | null = description ?? null;
-
-    // IDEA partial update handling
-    // IDEA check if user input actually changed something, updating to same value, use result.changedRows === 0
-    // IDEA race conditions, not a problem with postgresql (2 clients updating the same record simultaneously)
-
-    const [result] = await connection.execute<ResultSetHeader>(
-      'UPDATE products SET name = ?, price = ?, quantity = ?, description = ? WHERE productId = ? ',
-      [name, price, quantity, safeDescription, productId]
+    const [isProductExist] = await connection.execute<RowDataPacket[]>( // CHECK BY PRODUCT_ID IF PRODUCT ACTUALLY EXISTS IN THE DB
+      'SELECT * FROM products WHERE product_id = ?', // READ QUERY
+      [productId] // PARAMETERIZED VALUE
     );
+    if (!isProductExist.length) throw new AppError('A product with this id was not found', 404); // NO DATA RETURNED SEND ERROR MSG
 
-    if (!result.affectedRows) throw Error;
+    // GENERATE A DYNAMIC QUERY BASED ON THE AVAILABLE QUERY FIELDS
+    const allowedFields = ['name', 'price', 'stockQuantity', 'barcode'] as const; // MAKE THIS ARRAY IMMUTABLE AND TURN ELEMENTS TO LITERAL TYPES
+    const updatedFields: string[] = []; // TO STORE AVAILABLE QUERY FIELDS AND USED TO GENERATE SET CLAUSE
+    const updatedValues: (string | number | null)[] = []; // PARAMETERIZED VALUES OF AVAILABLE QUERY FIELDS
+    // LOOP EACH FIELD, IF ITS NOT UNDEFINED THEN EXECUTE THIS CODE BLOCK
+    for (const field of allowedFields) {
+      const value = req.body[field]; // GET CURRENT QUERY FIELD  VALUE
+      // CHECK IF IT HAS VALUE
+      if (value !== undefined) {
+        const column = field === 'stockQuantity' ? 'stock_quantity' : field; // USE CORRECT FIELD NAME IN DB
+        updatedFields.push(`${column} = ?`); // PUSH SET SYNTAX TO UPDATED FIELDS ARRAY TO BE CONCATENATED
+        updatedValues.push(value ?? null); // ANY VALUE THAT IS UNDEFINED OR NULL WILL BE STORED AS NULL
+      }
+    }
+    if (!updatedFields.length) throw new AppError('No fields provided for update', 400); // NO QUERY FIELDS WAS SENT, SEND ERROR MSG
+    updatedValues.push(productId); // PUSH PRODUCT ID AT THE END OF UPDATED VALUES ARRAY, CORRECT ORDER
 
-    res.status(200).json({ msg: 'success! updated a product', data: req.body });
+    const query = `Update products SET ${updatedFields.join(', ')} WHERE product_id = ?`; // FINAL QUERY STRING
+    const [result] = await connection.execute<ResultSetHeader>(query, updatedValues); // UPDATE PRODUCT
+    if (result.affectedRows === 0) throw Error; // FAILED TO UPDATE PRODUCT, SEND ERROR MSG
+    res.status(200).json({ msg: 'success! updated a product', data: req.body }); // IF SUCCESS, SEND JSON
   } catch (error) {
-    next(error);
+    next(error); // PASS ERROR TO CENTRALIZED ERROR HANDLER
   }
 };
 
-export const deleteProduct: RequestHandler<RequestParamsProducts> = async (req, res, next) => {
+export const deleteProduct: RequestHandler<ParamsProducts> = async (req, res, next) => {
   try {
-    // review id does not exist
     const { productId } = req.params;
 
-    // IDEA client deletes twice
-
-    const [result] = await connection.execute<ResultSetHeader>(
-      'DELETE FROM products WHERE productId =?',
+    // CHECK IF PRODUCT EXISTS
+    const [isProductExist] = await connection.execute<RowDataPacket[]>(
+      'SELECT * FROM products WHERE product_id = ?',
       [productId]
     );
+    if (isProductExist.length === 0)
+      throw new AppError('A product with this id was not found', 404);
 
-    if (!result.affectedRows) throw Error;
+    // IF IT IS THEN DELETE
+    const [result] = await connection.execute<ResultSetHeader>(
+      'DELETE FROM products WHERE product_id =?',
+      [productId]
+    );
+    if (result.affectedRows === 0) throw Error;
 
-    res.status(200).json({ msg: 'success! deleted a product' });
+    res.sendStatus(204);
   } catch (error) {
     next(error);
   }

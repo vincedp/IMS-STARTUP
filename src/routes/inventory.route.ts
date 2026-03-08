@@ -1,5 +1,6 @@
 import express from 'express';
 
+import { validate } from '../middlewares/validate.middleware';
 import {
   retrieveAllProducts,
   retrieveOneProduct,
@@ -11,31 +12,20 @@ import {
   addProductValidator,
   updateProductValidator,
   deleteProductValidator,
+  retrieveOneProductValidator,
+  retrieveAllProductsValidator,
 } from '../validators/inventory.validator';
-import { validate } from '../middleware/validate.middleware';
-import { RequestParamsProducts } from '../types/dto.types';
-import { Product } from '../types/product.types';
 
 const router = express.Router();
 
-router.get('/product', retrieveAllProducts);
+router.get('/product/{:search}', retrieveOneProductValidator, validate, retrieveOneProduct);
 
-router.get('/product/:productId', retrieveOneProduct);
+router.get('/product', retrieveAllProductsValidator, validate, retrieveAllProducts);
 
-router.post<{}, any, Product>('/add-product', addProductValidator, validate, addProduct);
+router.post('/add-product', addProductValidator, validate, addProduct);
 
-router.patch<RequestParamsProducts, any, Product>(
-  '/update-product/:productId',
-  updateProductValidator,
-  validate,
-  updateProduct
-);
+router.patch('/update-product/:productId', updateProductValidator, validate, updateProduct);
 
-router.delete<RequestParamsProducts>(
-  '/delete-product/:productId',
-  deleteProductValidator,
-  validate,
-  deleteProduct
-);
+router.delete('/delete-product/:productId', deleteProductValidator, validate, deleteProduct);
 
 export default router;
