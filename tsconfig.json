@@ -8,8 +8,8 @@
     "module": "nodenext",
     "target": "esnext",
     "types": [],
-
     // Recommended Options
+
     "strict": true,
     // "jsx": "react-jsx",
     // "verbatimModuleSyntax": true,
@@ -19,5 +19,6 @@
     "noImplicitAny": true,
     "esModuleInterop": true,
     "skipLibCheck": true
-  }
+  },
+  "include": ["src"]
 }
