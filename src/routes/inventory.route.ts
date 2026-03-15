@@ -15,17 +15,36 @@ import {
   retrieveOneProductValidator,
   retrieveAllProductsValidator,
 } from '../validators/inventory.validator';
+import { authenticate } from '../middlewares/auth.middleware';
 
 const router = express.Router();
 
-router.get('/product/{:search}', retrieveOneProductValidator, validate, retrieveOneProduct);
+router.get(
+  '/product/{:search}',
+  authenticate,
+  retrieveOneProductValidator,
+  validate,
+  retrieveOneProduct
+);
 
-router.get('/product', retrieveAllProductsValidator, validate, retrieveAllProducts);
+router.get('/product', authenticate, retrieveAllProductsValidator, validate, retrieveAllProducts);
 
-router.post('/add-product', addProductValidator, validate, addProduct);
+router.post('/add-product', authenticate, addProductValidator, validate, addProduct);
 
-router.patch('/update-product/:productId', updateProductValidator, validate, updateProduct);
+router.patch(
+  '/update-product/:productId',
+  authenticate,
+  updateProductValidator,
+  validate,
+  updateProduct
+);
 
-router.delete('/delete-product/:productId', deleteProductValidator, validate, deleteProduct);
+router.delete(
+  '/delete-product/:productId',
+  authenticate,
+  deleteProductValidator,
+  validate,
+  deleteProduct
+);
 
 export default router;
