@@ -1,12 +1,14 @@
 import express from 'express';
 import dotenv from 'dotenv';
 
+import { endpointNotFoundHandler, errorHandler } from './middlewares/error.middleware';
 import inventoryRouter from './routes/inventory.route';
 import authRouter from './routes/auth.route';
-import { errorHandler } from './middlewares/error.middleware';
-import { AppError } from './utils/AppError';
+import posRouter from './routes/pos.route';
 
 // idea compression, helmet, cors, logging, rate-limiter
+
+// idea use database transactions in all controllers that interact with db
 
 const BASE_URL = `/api/v1`;
 
@@ -18,13 +20,9 @@ app.use(express.json());
 
 app.use(`${BASE_URL}/inventory`, inventoryRouter);
 app.use(`${BASE_URL}/auth`, authRouter);
+app.use(`${BASE_URL}/pos`, posRouter);
 
-app.use('/*splat', (req, res, next) => {
-  const err = new AppError('Endpoint not found', 404);
-
-  next(err);
-});
-
+app.use('/*splat', endpointNotFoundHandler);
 app.use(errorHandler);
 
 app.listen(process.env.SERVER_PORT, () => {

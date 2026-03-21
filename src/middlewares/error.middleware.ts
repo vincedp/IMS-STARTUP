@@ -1,4 +1,4 @@
-import { NextFunction, Request, Response } from 'express';
+import { NextFunction, Request, RequestHandler, Response } from 'express';
 import { AppError } from '../utils/AppError';
 
 export const errorHandler = (err: unknown, req: Request, res: Response, next: NextFunction) => {
@@ -51,4 +51,10 @@ export const errorHandler = (err: unknown, req: Request, res: Response, next: Ne
     success: false,
     message,
   });
+};
+
+export const endpointNotFoundHandler: RequestHandler = (req, res, next) => {
+  const err = new AppError('Endpoint not found', 404);
+
+  next(err);
 };
