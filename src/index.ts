@@ -2,6 +2,9 @@ import express from 'express';
 import dotenv from 'dotenv';
 
 import cors from 'cors';
+
+import helmet from 'helmet';
+import compression from 'compression';
 //
 import { endpointNotFoundHandler, errorHandler } from './middlewares/error.middleware';
 import inventoryRouter from './routes/inventory.route';
@@ -20,6 +23,8 @@ const allowed = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000').split('
 
 const app = express();
 
+app.use(compression());
+app.use(helmet());
 app.use(
   cors({
     origin: allowed,
