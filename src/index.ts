@@ -1,8 +1,6 @@
 import express from 'express';
 import dotenv from 'dotenv';
 
-import cors from 'cors';
-//
 import { endpointNotFoundHandler, errorHandler } from './middlewares/error.middleware';
 import inventoryRouter from './routes/inventory.route';
 import authRouter from './routes/auth.route';
@@ -13,24 +11,10 @@ import posRouter from './routes/pos.route';
 // idea use database transactions in all controllers that interact with db
 
 const BASE_URL = `/api/v1`;
-const allowed = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000').split(',');
 
 dotenv.config();
 
 const app = express();
-
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      callback(null, allowed.includes(origin));
-    },
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  })
-);
-
-
 
 app.use(express.json());
 
